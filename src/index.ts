@@ -20,8 +20,6 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const JWT_SECRET = process.env.JWT_SECRET; // Asegúrate de tener esta variable en .env
 
-console.log('JWT_SECRET', JWT_SECRET);
-
 // 3. Verificar que las variables críticas estén definidas
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !JWT_SECRET) {
   console.error("Error: SUPABASE_URL, SUPABASE_ANON_KEY y JWT_SECRET deben estar definidas en el archivo .env");
