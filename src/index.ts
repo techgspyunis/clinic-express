@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { createClient, SupabaseClient } from '@supabase/supabase-js'; // Importamos SupabaseClient para tipado
 import { registerUser, loginUser } from './controllers/authController'; // Importamos los controladores
 import { authenticateToken } from './middlewares/authMiddleware'; // Importamos el middleware de autenticación
+import cors from 'cors';
 import {
   createOrderWithDetails,
   getAllOrders,
@@ -32,6 +33,10 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !JWT_SECRET) {
 const supabase: SupabaseClient = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
 
 const app = express();
+
+// Configuración básica para permitir todas las solicitudes de cualquier origen.
+// Para producción, se recomienda restringir a orígenes específicos.
+app.use(cors());
 
 // 5. Middleware para parsear JSON en las peticiones
 app.use(express.json());
