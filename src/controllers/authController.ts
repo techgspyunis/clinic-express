@@ -120,8 +120,6 @@ export const loginUser = (supabase: SupabaseClient) => async (req: Request, res:
       return res.status(401).json({ error: 'Credenciales inválidas.' });
     }
 
-    console.log('secret from controller', JWT_SECRET);
-
     // 3. Comparar la contraseña proporcionada con la contraseña hasheada
     const passwordMatch = await bcrypt.compare(password, user.password);
 

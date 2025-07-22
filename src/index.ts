@@ -9,7 +9,14 @@ import {
   getAllOrders,
   getOrderDetailsById,
   deleteOrder,
-} from './controllers/orderController'; // Importamos los controladores de órdenes
+} from './controllers/orderController'; // Importamos orders
+
+import { // Importamos invoices
+  createInvoiceWithDetails,
+  getAllInvoices,
+  getInvoiceDetailsById,
+  deleteInvoice,
+} from './controllers/invoiceController';
 
 // 1. Cargar variables de entorno
 dotenv.config();
@@ -51,12 +58,17 @@ app.get('/', (req, res) => {
 app.post('/register', registerUser(supabase));
 app.post('/login', loginUser(supabase));
 
-// --- Rutas de Órdenes (PROTEGIDAS por JWT) ---
-// Aplicamos el middleware 'authenticateToken' a todas las rutas de órdenes
+// --- Rutas de ordenes (PROTEGIDAS por JWT) ---
 app.post('/orders', authenticateToken, createOrderWithDetails(supabase));
 app.get('/orders', authenticateToken, getAllOrders(supabase));
 app.get('/orders/:orderId/details', authenticateToken, getOrderDetailsById(supabase));
 app.delete('/orders/:orderId', authenticateToken, deleteOrder(supabase));
+
+// --- Rutas de invoices (PROTEGIDAS por JWT) ---
+app.post('/invoices', authenticateToken, createInvoiceWithDetails(supabase));
+app.get('/invoices', authenticateToken, getAllInvoices(supabase));
+app.get('/invoices/:invoiceId/details', authenticateToken, getInvoiceDetailsById(supabase));
+app.delete('/invoices/:invoiceId', authenticateToken, deleteInvoice(supabase));
 
 
 // 7. Iniciar el servidor
