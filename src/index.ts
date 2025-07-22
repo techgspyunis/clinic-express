@@ -16,6 +16,7 @@ import { // Importamos invoices
   getAllInvoices,
   getInvoiceDetailsById,
   deleteInvoice,
+  updateInvoicePaymentStatus,
 } from './controllers/invoiceController';
 
 // 1. Cargar variables de entorno
@@ -69,7 +70,7 @@ app.post('/invoices', authenticateToken, createInvoiceWithDetails(supabase));
 app.get('/invoices', authenticateToken, getAllInvoices(supabase));
 app.get('/invoices/:invoiceId/details', authenticateToken, getInvoiceDetailsById(supabase));
 app.delete('/invoices/:invoiceId', authenticateToken, deleteInvoice(supabase));
-
+app.patch('/invoices/:invoiceId/payment', authenticateToken, updateInvoicePaymentStatus(supabase));
 
 // 7. Iniciar el servidor
 app.listen(PORT, () => {

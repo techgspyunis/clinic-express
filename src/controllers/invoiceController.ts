@@ -22,6 +22,10 @@ interface InvoiceInput {
   details: InvoiceDetailInput[]; // Array de los detalles de la factura
 }
 
+interface UpdatePaymentStatusBody {
+  is_payed: boolean;
+}
+
 // --- Funciones del Controlador ---
 
 // 1. Crear una nueva Factura con sus Detalles
@@ -180,6 +184,49 @@ export const deleteInvoice = (supabase: SupabaseClient) => async (req: Request, 
 
   } catch (err: any) {
     console.error('Excepción en deleteInvoice:', err);
+    res.status(500).json({ error: 'Error interno del servidor.' });
+  }
+};
+
+// 5. Actualizar el estado 'is_payed' de una factura
+export const updateInvoicePaymentStatus = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
+  try {
+    const { invoiceId } = req.params;
+    const { is_payed }: UpdatePaymentStatusBody = req.body;
+
+    // Validar que invoiceId sea proporcionado
+    if (!invoiceId) {
+      return res.status(400).json({ error: 'ID de factura es obligatorio para actualizar el estado de pago.' });
+    }
+
+    // Validar que is_payed sea un booleano
+    if (typeof is_payed !== 'boolean') {
+      return res.status(400).json({ error: 'El valor de "is_payed" debe ser un booleano (true/false).' });
+    }
+
+    // Actualizar el campo is_payed y updated_at
+    const { data, error } = await supabase
+      .from('invoice')
+      .update({ is_payed: is_payed, updated_at: new Date().toISOString() })
+      .eq('invoice_id', invoiceId)
+      .select(); // Para obtener la factura actualizada
+
+    if (error) {
+      console.error('Error al actualizar el estado de pago de la factura:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    if (!data || data.length === 0) {
+      return res.status(404).json({ message: 'Factura no encontrada o no se pudo actualizar.' });
+    }
+
+    res.status(200).json({
+      message: 'Estado de pago de la factura actualizado exitosamente.',
+      invoice: data[0],
+    });
+
+  } catch (err: any) {
+    console.error('Excepción en updateInvoicePaymentStatus:', err);
     res.status(500).json({ error: 'Error interno del servidor.' });
   }
 };
