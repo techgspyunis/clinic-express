@@ -18,6 +18,12 @@ import { // Importamos invoices
   deleteInvoice,
   updateInvoicePaymentStatus,
 } from './controllers/invoiceController';
+import { // Importamos los controladores administrativos
+  createAdministrativeWithResults,
+  getAllAdministratives,
+  getAdministrativeResultsById,
+  deleteAdministrative,
+} from './controllers/administrativeController';
 
 // 1. Cargar variables de entorno
 dotenv.config();
@@ -71,6 +77,13 @@ app.get('/invoices', authenticateToken, getAllInvoices(supabase));
 app.get('/invoices/:invoiceId/details', authenticateToken, getInvoiceDetailsById(supabase));
 app.delete('/invoices/:invoiceId', authenticateToken, deleteInvoice(supabase));
 app.patch('/invoices/:invoiceId/payment', authenticateToken, updateInvoicePaymentStatus(supabase));
+
+// --- Rutas Administrativas (PROTEGIDAS por JWT) ---
+app.post('/administratives', authenticateToken, createAdministrativeWithResults(supabase));
+app.get('/administratives', authenticateToken, getAllAdministratives(supabase));
+app.get('/administratives/:administrativeId/results', authenticateToken, getAdministrativeResultsById(supabase));
+app.delete('/administratives/:administrativeId', authenticateToken, deleteAdministrative(supabase));
+
 
 // 7. Iniciar el servidor
 app.listen(PORT, () => {
