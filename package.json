@@ -16,8 +16,11 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.21",
+    "@types/fs-extra": "^11.0.4",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.0.0",
     "@types/node": "^20.14.9",
+    "@types/unzipper": "^0.10.11",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.5.3"
   },
@@ -25,8 +28,12 @@
     "@supabase/supabase-js": "^2.52.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
+    "decompress-unzip": "^4.0.1",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
-    "jsonwebtoken": "^9.0.2"
+    "fs-extra": "^11.3.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "unzipper": "^0.12.3"
   }
 }

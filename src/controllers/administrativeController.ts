@@ -1,5 +1,9 @@
 import { Request, Response } from 'express';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { parseLabFile } from '../utils/labFileParser'; // Importar el parser
+import { decompressArchive, uploadFileToSupabaseStorage } from '../utils/archiveHandler'; // Importar el manejador de archivos
+import { FilePasswordService } from '../services/filePasswordService'; // Importar el servicio de contraseñas
+import * as path from 'path'; // Para manejar rutas de archivos
 
 // --- Interfaces para la estructura de datos ---
 
@@ -30,15 +34,16 @@ interface AdministrativeInput {
   city?: string | null;
   prescribing_doctor?: string | null;
   date_request?: string | null;
-  empty_field?: string | null;
+  empty_field?: string | null; // Campo 'vide' en el documento
   protocol_type?: string | null;
   cover?: string | null;
   holder?: string | null;
   cod_tit1?: string | null;
   cod_tit2?: string | null;
-  file_name?: string | null;
-  status?: number | null;
-  results: ResultInput[]; // Array de los detalles de resultados
+  file_name?: string | null; // Este lo añadiremos nosotros al guardar el archivo
+  status?: number | null; // El documento no lo define, pero tu tabla sí
+  zip_uploaded?: string | null; // NUEVO: Nombre del archivo ZIP subido
+  results?: ResultInput[]; // Array de los detalles de resultados (opcional para la subida de archivo)
 }
 
 // --- Funciones del Controlador ---
@@ -189,7 +194,7 @@ export const deleteAdministrative = (supabase: SupabaseClient) => async (req: Re
 
     if (updateAdminError) {
       console.error('Error al actualizar el registro administrativo principal a inactivo:', updateAdminError);
-      return res.status(500).json({ error: 'Error al actualizar el registro administrativo principal.' });
+      return res.status(500).json({ error: 'Error interno del servidor.' });
     }
 
     res.status(200).json({ message: 'Registro administrativo y sus resultados marcados como inactivos exitosamente.' });
@@ -197,5 +202,166 @@ export const deleteAdministrative = (supabase: SupabaseClient) => async (req: Re
   } catch (err: any) {
     console.error('Excepción en deleteAdministrative:', err);
     res.status(500).json({ error: 'Error interno del servidor.' });
+  }
+};
+
+// 5. Subir y Procesar Archivo LAB Comprimido
+export const uploadLabFile = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
+  try {
+    const uploadedFile = req.file;
+    const invoicedetail_id: string | null = req.body.invoicedetail_id || null;
+
+    if (!uploadedFile) {
+      return res.status(400).json({ error: 'No se ha subido ningún archivo.' });
+    }
+
+    const fileExtension = path.extname(uploadedFile.originalname).toLowerCase();
+    const allowedExtensions = ['.zip'];
+
+    if (!allowedExtensions.includes(fileExtension)) {
+      return res.status(400).json({ error: `Formato de archivo no soportado: ${fileExtension}. Solo se permiten ${allowedExtensions.join(', ')}.` });
+    }
+
+    const zipFileName = uploadedFile.originalname; // Nombre original del archivo ZIP
+
+    // --- NUEVA VALIDACIÓN: Verificar si el archivo ZIP ya fue subido y está activo ---
+    const { data: existingZipRecords, error: zipCheckError } = await supabase
+      .from('administrative')
+      .select('administrative_id')
+      .eq('zip_uploaded', zipFileName)
+      .eq('is_active', true);
+
+    if (zipCheckError) {
+      console.error('Error al verificar ZIP duplicado:', zipCheckError);
+      return res.status(500).json({ error: 'Error interno al verificar archivos ZIP duplicados.' });
+    }
+
+    if (existingZipRecords && existingZipRecords.length > 0) {
+      return res.status(409).json({ error: `El archivo ZIP "${zipFileName}" ya ha sido subido y está activo.` });
+    }
+    // --- FIN NUEVA VALIDACIÓN ---
+
+    let decompressedFiles: { path: string; data: Buffer }[] = [];
+    let passwordsToTry: string[] = [];
+
+    try {
+      passwordsToTry = await FilePasswordService.getAllActivePasswords(supabase);
+      passwordsToTry.unshift('');
+
+      decompressedFiles = await decompressArchive(uploadedFile.buffer, fileExtension, passwordsToTry);
+
+    } catch (decompressionError: any) {
+      console.error('Error durante la descompresión:', decompressionError.message);
+      return res.status(400).json({ error: `Error al descomprimir el archivo: ${decompressionError.message}. Verifique la contraseña o el formato.` });
+    }
+
+    const processedRecords: { administrativeId: string; labFileName: string; storageUrl: string; }[] = [];
+    const errors: string[] = [];
+    const skippedFiles: string[] = []; // Para registrar archivos .lab omitidos
+
+    // 3. Procesar cada archivo .lab descomprimido
+    for (const file of decompressedFiles) {
+      if (path.extname(file.path).toLowerCase() !== '.lab') {
+        console.warn(`Archivo ignorado (no es .lab): ${file.path}`);
+        continue;
+      }
+
+      const labFileName = path.basename(file.path);
+      let storageUrl: string | null = null;
+      let parsedBlocks;
+
+      // --- NUEVA VALIDACIÓN: Verificar si el archivo .lab ya existe y está activo ---
+      const { data: existingLabFileRecords, error: labFileCheckError } = await supabase
+        .from('administrative')
+        .select('administrative_id')
+        .eq('file_name', `lab_files/${labFileName}`) // Asume que la URL en DB contendrá el nombre del archivo
+        .eq('is_active', true);
+
+      if (labFileCheckError) {
+        console.error(`Error al verificar archivo .lab duplicado para ${labFileName}:`, labFileCheckError);
+        errors.push(`Error interno al verificar duplicado para ${labFileName}.`);
+        continue;
+      }
+
+      if (existingLabFileRecords && existingLabFileRecords.length > 0) {
+        skippedFiles.push(labFileName);
+        console.warn(`Archivo .lab "${labFileName}" ya existe y está activo. Se omitirá la inserción.`);
+        continue; // Saltar la inserción si ya existe
+      }
+      // --- FIN NUEVA VALIDACIÓN ---
+
+      try {
+        // Subir el archivo .lab original a Supabase Storage
+        const storagePath = `lab_files/${Date.now()}_${labFileName}`;
+        storageUrl = await uploadFileToSupabaseStorage(supabase, 'lab-files', storagePath, file.data, 'text/plain');
+
+        // Parsear el contenido del archivo .lab
+        const fileContent = file.data.toString('utf8');
+        parsedBlocks = parseLabFile(fileContent);
+
+      } catch (parseOrStorageError: any) {
+        console.error(`Error al procesar el archivo ${labFileName}:`, parseOrStorageError.message);
+        errors.push(`Error al procesar ${labFileName}: ${parseOrStorageError.message}`);
+        continue;
+      }
+
+      // 4. Insertar datos en las tablas administrative y result
+      for (const block of parsedBlocks) {
+        try {
+          // Preparar datos administrativos
+          const adminToInsert = {
+            ...block.administrative,
+            invoicedetail_id: invoicedetail_id,
+            file_name: storageUrl, // Guardar la URL del archivo LAB en la cabecera administrativa
+            zip_uploaded: zipFileName, // NUEVO: Guardar el nombre del ZIP subido
+            status: block.administrative.status || 0,
+          };
+
+          const { data: adminData, error: adminInsertError } = await supabase
+            .from('administrative')
+            .insert(adminToInsert)
+            .select('administrative_id');
+
+          if (adminInsertError || !adminData || adminData.length === 0) {
+            throw new Error(`Error al insertar registro administrativo: ${adminInsertError?.message}`);
+          }
+
+          const administrative_id = adminData[0].administrative_id;
+
+          // Preparar y insertar resultados
+          const resultsToInsert = block.results.map(result => ({
+            ...result,
+            administrative_id: administrative_id,
+          }));
+
+          const { error: resultInsertError } = await supabase
+            .from('result')
+            .insert(resultsToInsert);
+
+          if (resultInsertError) {
+            throw new Error(`Error al insertar resultados: ${resultInsertError.message}`);
+          }
+
+          processedRecords.push({ administrativeId: administrative_id, labFileName: labFileName, storageUrl: storageUrl });
+
+        } catch (dbError: any) {
+          console.error(`Error al insertar datos de DB para ${labFileName}:`, dbError.message);
+          errors.push(`Error al insertar datos de ${labFileName} en DB: ${dbError.message}`);
+        }
+      }
+    }
+
+    res.status(200).json({
+      message: 'Procesamiento de archivo LAB completado.',
+      processedFilesCount: processedRecords.length,
+      totalErrors: errors.length,
+      skippedFiles: skippedFiles, // NUEVO: Lista de archivos .lab omitidos
+      processedRecords: processedRecords,
+      errors: errors,
+    });
+
+  } catch (err: any) {
+    console.error('Excepción en uploadLabFile:', err);
+    res.status(500).json({ error: 'Error interno del servidor al procesar el archivo LAB.' });
   }
 };

@@ -4,6 +4,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'; // Importa
 import { registerUser, loginUser } from './controllers/authController'; // Importamos los controladores
 import { authenticateToken } from './middlewares/authMiddleware'; // Importamos el middleware de autenticación
 import cors from 'cors';
+import multer from 'multer'; // Importamos multer
 import {
   createOrderWithDetails,
   getAllOrders,
@@ -23,6 +24,7 @@ import { // Importamos los controladores administrativos
   getAllAdministratives,
   getAdministrativeResultsById,
   deleteAdministrative,
+  uploadLabFile,
 } from './controllers/administrativeController';
 
 // 1. Cargar variables de entorno
@@ -52,6 +54,14 @@ app.use(cors());
 
 // 5. Middleware para parsear JSON en las peticiones
 app.use(express.json());
+
+// Usamos storage en memoria para que el buffer del archivo esté disponible directamente
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // Limite de 5MB por archivo (ajusta si es necesario)
+  },
+});
 
 // 6. Rutas de la API
 
@@ -83,7 +93,7 @@ app.post('/administratives', authenticateToken, createAdministrativeWithResults(
 app.get('/administratives', authenticateToken, getAllAdministratives(supabase));
 app.get('/administratives/:administrativeId/results', authenticateToken, getAdministrativeResultsById(supabase));
 app.delete('/administratives/:administrativeId', authenticateToken, deleteAdministrative(supabase));
-
+app.post('/upload-lab-file', authenticateToken, upload.single('file'), uploadLabFile(supabase));
 
 // 7. Iniciar el servidor
 app.listen(PORT, () => {
