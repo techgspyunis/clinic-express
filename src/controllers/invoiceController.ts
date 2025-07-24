@@ -1,232 +1,232 @@
 import { Request, Response } from 'express';
 import { SupabaseClient } from '@supabase/supabase-js';
 
-// --- Interfaces para la estructura de datos ---
+// --- Interfaces for data structure ---
 
-// Interfaz para un detalle de factura en la petición
+// Interface for an invoice detail in the request
 interface InvoiceDetailInput {
   demande: string;
   name_patient: string;
   date_prel: string;
   ref_patient: string;
-  montant: number; // Numeric en DB, lo manejamos como number en TS
-  unknow?: string | null; // Puede ser null
+  montant: number; // Numeric in DB, handled as number in TS
+  unknow?: string | null; // Can be null
 }
 
-// Interfaz para la factura principal en la petición (incluye sus detalles)
+// Interface for the main invoice in the request (includes its details)
 interface InvoiceInput {
-  date: string; // O Date si prefieres manejarlo como objeto Date en el frontend y convertirlo
+  date: string; // Or Date if you prefer to handle it as a Date object in the frontend and convert it
   description: string;
-  is_payed?: boolean; // Opcional, con valor por defecto en DB
-  upload_file?: string | null; // Opcional, puede ser null
-  details: InvoiceDetailInput[]; // Array de los detalles de la factura
+  is_payed?: boolean; // Optional, with default value in DB
+  upload_file?: string | null; // Optional, can be null
+  details: InvoiceDetailInput[]; // Array of invoice details
 }
 
 interface UpdatePaymentStatusBody {
   is_payed: boolean;
 }
 
-// --- Funciones del Controlador ---
+// --- Controller Functions ---
 
-// 1. Crear una nueva Factura con sus Detalles
+// 1. Create a new Invoice with its Details
 export const createInvoiceWithDetails = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
   try {
     const { date, description, is_payed, upload_file, details }: InvoiceInput = req.body;
 
-    // Validar datos de entrada básicos para la cabecera
+    // Validate basic input data for the header
     if (!date || !description || !details || details.length === 0) {
-      return res.status(400).json({ error: 'La fecha, descripción y al menos un detalle de factura son obligatorios.' });
+      return res.status(400).json({ error: 'Date, description, and at least one invoice detail are mandatory.' });
     }
 
-    // Validar que todos los detalles tengan los campos requeridos
+    // Validate that all details have the required fields
     for (const detail of details) {
       if (!detail.demande || !detail.name_patient || !detail.date_prel || !detail.ref_patient || detail.montant === undefined || detail.montant === null) {
-        return res.status(400).json({ error: 'Todos los campos requeridos en los detalles de la factura (demande, name_patient, date_prel, ref_patient, montant) son obligatorios.' });
+        return res.status(400).json({ error: 'All required fields in invoice details (demande, name_patient, date_prel, ref_patient, montant) are mandatory.' });
       }
     }
 
-    // Insertar la cabecera de la factura
+    // Insert the invoice header
     const { data: invoiceData, error: invoiceError } = await supabase
       .from('invoice')
       .insert({
         date,
         description,
-        is_payed: is_payed ?? false, // Usar el valor proporcionado o el predeterminado de la base de datos
-        upload_file: upload_file ?? null, // Usar el valor proporcionado o null
-        // created_at, updated_at, is_active se manejan por defecto en la tabla
+        is_payed: is_payed ?? false, // Use the provided value or the database default
+        upload_file: upload_file ?? null, // Use the provided value or null
+        // created_at, updated_at, is_active are handled by default in the table
       })
-      .select('invoice_id'); // Solo necesitamos el invoice_id para los detalles
+      .select('invoice_id'); // We only need the invoice_id for the details
 
     if (invoiceError || !invoiceData || invoiceData.length === 0) {
-      console.error('Error al crear la factura:', invoiceError);
-      return res.status(500).json({ error: 'Error al crear la factura principal.' });
+      console.error('Error creating invoice:', invoiceError);
+      return res.status(500).json({ error: 'Error creating the main invoice.' });
     }
 
     const invoice_id = invoiceData[0].invoice_id;
 
-    // Preparar los detalles para la inserción
+    // Prepare the details for insertion
     const detailsToInsert = details.map(detail => ({
       ...detail,
-      invoice_id: invoice_id, // Asignar el ID de la factura recién creada
-      // created_at, updated_at, is_active se manejan por defecto en la tabla
+      invoice_id: invoice_id, // Assign the newly created invoice ID
+      // created_at, updated_at, is_active are handled by default in the table
     }));
 
-    // Insertar los detalles de la factura
+    // Insert the invoice details
     const { data: detailData, error: detailError } = await supabase
       .from('invoicedetail')
       .insert(detailsToInsert)
-      .select(); // Seleccionar todos los campos de los detalles insertados
+      .select(); // Select all fields of the inserted details
 
     if (detailError) {
-      console.error('Error al crear los detalles de la factura:', detailError);
-      // Si los detalles fallan, revertimos la creación de la factura principal.
+      console.error('Error creating invoice details:', detailError);
+      // If details fail, we revert the creation of the main invoice.
       await supabase.from('invoice').delete().eq('invoice_id', invoice_id);
-      return res.status(500).json({ error: 'Error al crear los detalles de la factura. La factura principal fue revertida.' });
+      return res.status(500).json({ error: 'Error creating invoice details. The main invoice was reverted.' });
     }
 
     res.status(201).json({
-      message: 'Factura y detalles creados exitosamente.',
+      message: 'Invoice and details created successfully.',
       invoice: invoiceData[0],
       details: detailData,
     });
 
   } catch (err: any) {
-    console.error('Excepción en createInvoiceWithDetails:', err);
-    res.status(500).json({ error: 'Error interno del servidor.' });
+    console.error('Exception in createInvoiceWithDetails:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
 };
 
-// 2. Obtener todas las Facturas (solo cabeceras)
+// 2. Get all Invoices (headers only)
 export const getAllInvoices = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
   try {
     const { data, error } = await supabase
       .from('invoice')
       .select('*')
-      .eq('is_active', true) // Solo facturas activas
-      .order('created_at', { ascending: false }); // Ordenar por fecha de creación
+      .eq('is_active', true) // Only active invoices
+      .order('created_at', { ascending: false }); // Order by creation date
 
     if (error) {
-      console.error('Error al obtener facturas:', error);
+      console.error('Error getting invoices:', error);
       return res.status(500).json({ error: error.message });
     }
 
     res.status(200).json(data);
   } catch (err: any) {
-    console.error('Excepción en getAllInvoices:', err);
-    res.status(500).json({ error: 'Error interno del servidor.' });
+    console.error('Exception in getAllInvoices:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
 };
 
-// 3. Obtener Detalles de una Factura Específica por invoice_id
+// 3. Get Details of a Specific Invoice by invoice_id
 export const getInvoiceDetailsById = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
   try {
-    const { invoiceId } = req.params; // invoiceId viene de la URL (ej. /invoices/123/details)
+    const { invoiceId } = req.params; // invoiceId comes from the URL (e.g. /invoices/123/details)
 
     if (!invoiceId) {
-      return res.status(400).json({ error: 'ID de factura es obligatorio.' });
+      return res.status(400).json({ error: 'Invoice ID is mandatory.' });
     }
 
     const { data, error } = await supabase
       .from('invoicedetail')
       .select('*')
       .eq('invoice_id', invoiceId)
-      .eq('is_active', true) // Solo detalles activos
-      .order('created_at', { ascending: true }); // Ordenar por fecha de creación
+      .eq('is_active', true) // Only active details
+      .order('created_at', { ascending: true }); // Order by creation date
 
     if (error) {
-      console.error('Error al obtener detalles de la factura:', error);
+      console.error('Error getting invoice details:', error);
       return res.status(500).json({ error: error.message });
     }
 
     if (!data || data.length === 0) {
-      return res.status(404).json({ message: 'No se encontraron detalles para la factura especificada.' });
+      return res.status(404).json({ message: 'No details found for the specified invoice.' });
     }
 
     res.status(200).json(data);
   } catch (err: any) {
-    console.error('Excepción en getInvoiceDetailsById:', err);
-    res.status(500).json({ error: 'Error interno del servidor.' });
+    console.error('Exception in getInvoiceDetailsById:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
 };
 
-// 4. "Eliminar" una Factura y sus Detalles Asociados (Soft Delete)
+// 4. "Delete" an Invoice and its Associated Details (Soft Delete)
 export const deleteInvoice = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
   try {
     const { invoiceId } = req.params;
 
     if (!invoiceId) {
-      return res.status(400).json({ error: 'ID de factura es obligatorio para la eliminación.' });
+      return res.status(400).json({ error: 'Invoice ID is mandatory for deletion.' });
     }
 
-    // Primero, actualizar is_active a false para los detalles de la factura
+    // First, update is_active to false for the invoice details
     const { error: updateDetailsError } = await supabase
       .from('invoicedetail')
-      .update({ is_active: false, updated_at: new Date().toISOString() }) // Actualizar también updated_at
+      .update({ is_active: false, updated_at: new Date().toISOString() }) // Also update updated_at
       .eq('invoice_id', invoiceId);
 
     if (updateDetailsError) {
-      console.error('Error al actualizar detalles de la factura a inactivos:', updateDetailsError);
-      return res.status(500).json({ error: 'Error al actualizar los detalles de la factura.' });
+      console.error('Error updating invoice details to inactive:', updateDetailsError);
+      return res.status(500).json({ error: 'Error updating invoice details.' });
     }
 
-    // Luego, actualizar is_active a false para la factura principal
+    // Then, update is_active to false for the main invoice
     const { error: updateInvoiceError } = await supabase
       .from('invoice')
-      .update({ is_active: false, updated_at: new Date().toISOString() }) // Actualizar también updated_at
+      .update({ is_active: false, updated_at: new Date().toISOString() }) // Also update updated_at
       .eq('invoice_id', invoiceId);
 
     if (updateInvoiceError) {
-      console.error('Error al actualizar la factura principal a inactiva:', updateInvoiceError);
-      return res.status(500).json({ error: 'Error al actualizar la factura principal.' });
+      console.error('Error updating main invoice to inactive:', updateInvoiceError);
+      return res.status(500).json({ error: 'Error updating the main invoice.' });
     }
 
-    res.status(200).json({ message: 'Factura y sus detalles marcados como inactivos exitosamente.' });
+    res.status(200).json({ message: 'Invoice and its details successfully marked as inactive.' });
 
   } catch (err: any) {
-    console.error('Excepción en deleteInvoice:', err);
-    res.status(500).json({ error: 'Error interno del servidor.' });
+    console.error('Exception in deleteInvoice:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
 };
 
-// 5. Actualizar el estado 'is_payed' de una factura
+// 5. Update the 'is_payed' status of an invoice
 export const updateInvoicePaymentStatus = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
   try {
     const { invoiceId } = req.params;
     const { is_payed }: UpdatePaymentStatusBody = req.body;
 
-    // Validar que invoiceId sea proporcionado
+    // Validate that invoiceId is provided
     if (!invoiceId) {
-      return res.status(400).json({ error: 'ID de factura es obligatorio para actualizar el estado de pago.' });
+      return res.status(400).json({ error: 'Invoice ID is mandatory to update payment status.' });
     }
 
-    // Validar que is_payed sea un booleano
+    // Validate that is_payed is a boolean
     if (typeof is_payed !== 'boolean') {
-      return res.status(400).json({ error: 'El valor de "is_payed" debe ser un booleano (true/false).' });
+      return res.status(400).json({ error: 'The value for "is_payed" must be a boolean (true/false).' });
     }
 
-    // Actualizar el campo is_payed y updated_at
+    // Update the is_payed field and updated_at
     const { data, error } = await supabase
       .from('invoice')
       .update({ is_payed: is_payed, updated_at: new Date().toISOString() })
       .eq('invoice_id', invoiceId)
-      .select(); // Para obtener la factura actualizada
+      .select(); // To get the updated invoice
 
     if (error) {
-      console.error('Error al actualizar el estado de pago de la factura:', error);
+      console.error('Error updating invoice payment status:', error);
       return res.status(500).json({ error: error.message });
     }
 
     if (!data || data.length === 0) {
-      return res.status(404).json({ message: 'Factura no encontrada o no se pudo actualizar.' });
+      return res.status(404).json({ message: 'Invoice not found or could not be updated.' });
     }
 
     res.status(200).json({
-      message: 'Estado de pago de la factura actualizado exitosamente.',
+      message: 'Invoice payment status updated successfully.',
       invoice: data[0],
     });
 
   } catch (err: any) {
-    console.error('Excepción en updateInvoicePaymentStatus:', err);
-    res.status(500).json({ error: 'Error interno del servidor.' });
+    console.error('Exception in updateInvoicePaymentStatus:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
 };

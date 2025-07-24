@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-// Extendemos la interfaz Request de Express para añadir la propiedad 'user'
-// Esto nos permite adjuntar la información del usuario decodificada del JWT
+// Extend the Express Request interface to add the 'user' property
+// This allows us to attach the decoded user information from the JWT
 declare global {
   namespace Express {
     interface Request {
@@ -10,7 +10,7 @@ declare global {
         userId: string;
         email: string;
         username: string;
-        // Puedes añadir más propiedades si las incluyes en el payload de tu JWT
+        // You can add more properties if you include them in your JWT payload
       };
     }
   }
@@ -19,33 +19,33 @@ declare global {
 const JWT_SECRET = process.env.JWT_SECRET;
 
 export const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
-  // 1. Obtener el encabezado de autorización
+  // 1. Get the authorization header
   const authHeader = req.headers['authorization'];
-  // El token generalmente viene como "Bearer TOKEN_AQUI"
+  // The token usually comes as "Bearer TOKEN_HERE"
   const token = authHeader && authHeader.split(' ')[1];
 
-  // 2. Verificar si no hay token
+  // 2. Check if no token is provided
   if (token == null) {
-    return res.status(401).json({ error: 'Acceso denegado. No se proporcionó token.' });
+    return res.status(401).json({ error: 'Access denied. No token provided.' });
   }
 
-  // 3. Verificar si JWT_SECRET está definido
+  // 3. Check if JWT_SECRET is defined
   if (!JWT_SECRET) {
-    console.error('JWT_SECRET no está definido en el entorno.');
-    return res.status(500).json({ error: 'Error de configuración del servidor.' });
+    console.error('JWT_SECRET is not defined in the environment.');
+    return res.status(500).json({ error: 'Server configuration error.' });
   }
 
-  // 4. Verificar el token
+  // 4. Verify the token
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
-      // Si el token no es válido (expirado, mal firmado, etc.)
-      console.error('Error al verificar token:', err.message);
-      return res.status(403).json({ error: 'Token inválido o expirado.' });
+      // If the token is invalid (expired, malformed, etc.)
+      console.error('Error verifying token:', err.message);
+      return res.status(403).json({ error: 'Invalid or expired token.' });
     }
 
-    // Si el token es válido, adjuntamos la información del usuario a la solicitud
-    // para que los controladores posteriores puedan acceder a ella.
+    // If the token is valid, we attach the user information to the request
+    // so that subsequent controllers can access it.
     req.user = user as Request['user'];
-    next(); // Continuar con la siguiente función middleware o controlador de ruta
+    next(); // Continue with the next middleware function or route handler
   });
 };

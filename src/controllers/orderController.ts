@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import { SupabaseClient } from '@supabase/supabase-js';
 
-// --- Interfaces para la estructura de datos ---
+// --- Interfaces for data structure ---
 
-// Interfaz para un detalle de orden en la petición
+// Interface for an order detail in the request
 interface OrderDetailInput {
   number: number;
   centre_medical: string;
@@ -14,179 +14,179 @@ interface OrderDetailInput {
   code: string;
 }
 
-// Interfaz para la orden principal en la petición (incluye sus detalles)
+// Interface for the main order in the request (includes its details)
 interface OrderInput {
-  date: string; // O Date si prefieres manejarlo como objeto Date en el frontend y convertirlo
+  date: string; // Or Date if you prefer to handle it as a Date object in the frontend and convert it
   description: string;
   upload_file: string;
-  details: OrderDetailInput[]; // Array de los detalles de la orden
+  details: OrderDetailInput[]; // Array of order details
 }
 
-// --- Funciones del Controlador ---
+// --- Controller Functions ---
 
-// 1. Crear una nueva Orden con sus Detalles
+// 1. Create a new Order with its Details
 export const createOrderWithDetails = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
   try {
     const { date, description, upload_file, details }: OrderInput = req.body;
 
-    // Validar datos de entrada básicos
+    // Validate basic input data
     if (!date || !description || !details || details.length === 0) {
-      return res.status(400).json({ error: 'La fecha, descripción y al menos un detalle son obligatorios.' });
+      return res.status(400).json({ error: 'Date, description, and at least one detail are mandatory.' });
     }
 
-    // Validar que todos los detalles tengan los campos requeridos
+    // Validate that all details have the required fields
     for (const detail of details) {
       if (!detail.number || !detail.centre_medical || !detail.ref_patient || !detail.name_patient || !detail.ref_analyze || !detail.nomenclature_examen || !detail.code) {
-        return res.status(400).json({ error: 'Todos los campos en los detalles de la orden son obligatorios.' });
+        return res.status(400).json({ error: 'All fields in order details are mandatory.' });
       }
     }
 
-    // Insertar la cabecera de la orden
+    // Insert the order header
     const { data: orderData, error: orderError } = await supabase
       .from('order')
       .insert({
         date,
         description,
         upload_file
-        // created_at, updated_at, is_active se manejan por defecto en la tabla
+        // created_at, updated_at, is_active are handled by default in the table
       })
-      .select('order_id'); // Solo necesitamos el order_id para los detalles
+      .select('order_id'); // We only need the order_id for the details
 
     if (orderError || !orderData || orderData.length === 0) {
-      console.error('Error al crear la orden:', orderError);
-      return res.status(500).json({ error: 'Error al crear la orden principal.' });
+      console.error('Error creating order:', orderError);
+      return res.status(500).json({ error: 'Error creating the main order.' });
     }
 
     const order_id = orderData[0].order_id;
 
-    // Preparar los detalles para la inserción
+    // Prepare the details for insertion
     const detailsToInsert = details.map(detail => ({
       ...detail,
-      order_id: order_id, // Asignar el ID de la orden recién creada
-      created_at: new Date().toISOString(), // Asegurar que created_at se genera si no es por defecto en DB
-      updated_at: new Date().toISOString(), // Asegurar que updated_at se genera si no es por defecto en DB
+      order_id: order_id, // Assign the newly created order ID
+      created_at: new Date().toISOString(), // Ensure created_at is generated if not default in DB
+      updated_at: new Date().toISOString(), // Ensure updated_at is generated if not default in DB
     }));
 
-    // Insertar los detalles de la orden
+    // Insert the order details
     const { data: detailData, error: detailError } = await supabase
       .from('orderdetail')
       .insert(detailsToInsert)
-      .select(); // Seleccionar todos los campos de los detalles insertados
+      .select(); // Select all fields of the inserted details
 
     if (detailError) {
-      console.error('Error al crear los detalles de la orden:', detailError);
-      // Si los detalles fallan, podríamos querer revertir la creación de la orden principal.
-      // Supabase no tiene transacciones directas para múltiples tablas en el cliente JS.
-      // Para una "no sobreingeniería", por ahora, solo reportamos el error.
-      // En un caso más robusto, se podría añadir una lógica para eliminar la orden principal aquí.
-      await supabase.from('order').delete().eq('order_id', order_id); // Intentar revertir la orden principal
-      return res.status(500).json({ error: 'Error al crear los detalles de la orden. La orden principal fue revertida.' });
+      console.error('Error creating order details:', detailError);
+      // If details fail, we might want to revert the creation of the main order.
+      // Supabase does not have direct transactions for multiple tables in the JS client.
+      // For "no over-engineering", for now, we just report the error.
+      // In a more robust case, logic could be added to delete the main order here.
+      await supabase.from('order').delete().eq('order_id', order_id); // Attempt to revert the main order
+      return res.status(500).json({ error: 'Error creating order details. The main order was reverted.' });
     }
 
     res.status(201).json({
-      message: 'Orden y detalles creados exitosamente.',
+      message: 'Order and details created successfully.',
       order: orderData[0],
       details: detailData,
     });
 
   } catch (err: any) {
-    console.error('Excepción en createOrderWithDetails:', err);
-    res.status(500).json({ error: 'Error interno del servidor.' });
+    console.error('Exception in createOrderWithDetails:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
 };
 
-// 2. Obtener todas las Órdenes (solo cabeceras)
+// 2. Get all Orders (headers only)
 export const getAllOrders = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
   try {
     const { data, error } = await supabase
       .from('order')
       .select('*')
-      .eq('is_active', true) // Opcional: solo órdenes activas
-      .order('created_at', { ascending: false }); // Ordenar por fecha de creación
+      .eq('is_active', true) // Optional: only active orders
+      .order('created_at', { ascending: false }); // Order by creation date
 
     if (error) {
-      console.error('Error al obtener órdenes:', error);
+      console.error('Error getting orders:', error);
       return res.status(500).json({ error: error.message });
     }
 
-        if (!data || data.length === 0) {
-      return res.status(404).json({ message: 'No se encontraron ordenes' });
+    if (!data || data.length === 0) {
+      return res.status(404).json({ message: 'No orders found.' });
     }
 
     res.status(200).json(data);
   } catch (err: any) {
-    console.error('Excepción en getAllOrders:', err);
-    res.status(500).json({ error: 'Error interno del servidor.' });
+    console.error('Exception in getAllOrders:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
 };
 
-// 3. Obtener Detalles de una Orden Específica por order_id
+// 3. Get Details of a Specific Order by order_id
 export const getOrderDetailsById = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
   try {
-    const { orderId } = req.params; // orderId viene de la URL (ej. /orders/123/details)
+    const { orderId } = req.params; // orderId comes from the URL (e.g. /orders/123/details)
 
     if (!orderId) {
-      return res.status(400).json({ error: 'ID de orden es obligatorio.' });
+      return res.status(400).json({ error: 'Order ID is mandatory.' });
     }
 
     const { data, error } = await supabase
       .from('orderdetail')
       .select('*')
       .eq('order_id', orderId)
-      .eq('is_active', true) // Opcional: solo detalles activos
-      .order('number', { ascending: true }); // Opcional: ordenar detalles por número
+      .eq('is_active', true) // Optional: only active details
+      .order('number', { ascending: true }); // Optional: order details by number
 
     if (error) {
-      console.error('Error al obtener detalles de la orden:', error);
+      console.error('Error getting order details:', error);
       return res.status(500).json({ error: error.message });
     }
 
     if (!data || data.length === 0) {
-      return res.status(404).json({ message: 'No se encontraron detalles para la orden especificada.' });
+      return res.status(404).json({ message: 'No details found for the specified order.' });
     }
 
     res.status(200).json(data);
   } catch (err: any) {
-    console.error('Excepción en getOrderDetailsById:', err);
-    res.status(500).json({ error: 'Error interno del servidor.' });
+    console.error('Exception in getOrderDetailsById:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
 };
 
-// 4. "Eliminar" una Orden y sus Detalles Asociados (Soft Delete)
+// 4. "Delete" an Order and its Associated Details (Soft Delete)
 export const deleteOrder = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
 
     if (!orderId) {
-      return res.status(400).json({ error: 'ID de orden es obligatorio para la eliminación.' });
+      return res.status(400).json({ error: 'Order ID is mandatory for deletion.' });
     }
 
-    // Primero, actualizar is_active a false para los detalles de la orden
+    // First, update is_active to false for the order details
     const { error: updateDetailsError } = await supabase
       .from('orderdetail')
       .update({ is_active: false })
       .eq('order_id', orderId);
 
     if (updateDetailsError) {
-      console.error('Error al actualizar detalles de la orden a inactivos:', updateDetailsError);
-      return res.status(500).json({ error: 'Error al actualizar los detalles de la orden.' });
+      console.error('Error updating order details to inactive:', updateDetailsError);
+      return res.status(500).json({ error: 'Error updating order details.' });
     }
 
-    // Luego, actualizar is_active a false para la orden principal
+    // Then, update is_active to false for the main order
     const { error: updateOrderError } = await supabase
       .from('order')
       .update({ is_active: false })
       .eq('order_id', orderId);
 
     if (updateOrderError) {
-      console.error('Error al actualizar la orden principal a inactiva:', updateOrderError);
-      return res.status(500).json({ error: 'Error al actualizar la orden principal.' });
+      console.error('Error updating main order to inactive:', updateOrderError);
+      return res.status(500).json({ error: 'Error updating the main order.' });
     }
 
-    res.status(200).json({ message: 'Orden y sus detalles marcados como inactivos exitosamente.' });
+    res.status(200).json({ message: 'Order and its details successfully marked as inactive.' });
 
   } catch (err: any) {
-    console.error('Excepción en deleteOrder:', err);
-    res.status(500).json({ error: 'Error interno del servidor.' });
+    console.error('Exception in deleteOrder:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
 };
