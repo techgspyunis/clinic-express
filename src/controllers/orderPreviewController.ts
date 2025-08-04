@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { SupabaseClient } from '@supabase/supabase-js';
 
-// Definimos las interfaces para una mejor tipificación
+// Define interfaces for better typing
 interface OrderDetailInput {
   medical_center: string;
   patient_name: string;
@@ -26,20 +26,19 @@ interface TranslationCode {
 }
 
 /**
- * Función que crea un preview de órdenes a partir de un formato de entrada de 3 columnas.
- * Genera los campos faltantes (número, referencias, código) y los guarda en tablas de previsualización.
+ * Function that creates an order preview from a 3-column input format.
+ * It generates the missing fields (number, references, code) and saves them in preview tables.
  */
 export const createOrderPreview = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
   try {
     const { date, description, year, month, week, orderDetails }: OrderPreviewRequestBody = req.body;
 
-    // 1. Validación de la entrada
+    // 1. Input validation
     if (!orderDetails || orderDetails.length === 0) {
-      return res.status(400).json({ error: 'La lista de detalles de la orden está vacía.' });
+      return res.status(400).json({ error: 'The order details list is empty.' });
     }
 
-
-    // 2. Validación de previsualización existente para el mismo periodo
+    // 2. Validation for an existing preview for the same period
     const { data: existingPreview, error: existingError } = await supabase
       .from('orderpreview')
       .select('order_id')
@@ -49,15 +48,15 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
       .limit(1);
 
     if (existingError) {
-      console.error('Error al buscar previsualización existente:', existingError);
-      return res.status(500).json({ error: 'Error al verificar la previsualización existente.' });
+      console.error('Error searching for existing preview:', existingError);
+      return res.status(500).json({ error: 'Error validating the existing preview.' });
     }
 
     if (existingPreview && existingPreview.length > 0) {
-      return res.status(409).json({ error: `Ya existe una previsualización de orden para el año ${year}, mes ${month} y semana ${week}.` });
+      return res.status(409).json({ error: `An order preview for year ${year}, month ${month}, and week ${week} already exists.` });
     }
 
-    // 3. Insertamos la orden principal de previsualización
+    // 3. Insert the main order preview
     const { data: orderPreviewData, error: orderPreviewError } = await supabase
       .from('orderpreview')
       .insert({
@@ -70,25 +69,25 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
       .select('order_id');
 
     if (orderPreviewError) {
-      console.error('Error al insertar la orden de previsualización:', orderPreviewError);
-      return res.status(500).json({ error: 'Error al crear la previsualización de la orden.' });
+      console.error('Error inserting the order preview:', orderPreviewError);
+      return res.status(500).json({ error: 'Error creating the order preview.' });
     }
 
     const orderId = orderPreviewData[0].order_id;
 
-    // Obtener una lista única de centros médicos para buscar el último correlativo
+    // Get a unique list of medical centers to find the last correlative number
     const uniqueMedicalCenters = [...new Set(orderDetails.map(detail => detail.medical_center))];
     
-    // Objeto para llevar el control de los correlativos por centro médico
+    // Object to keep track of correlative numbers by medical center
     const medicalCenterCorrelatives: { [key: string]: number } = {};
 
-    // 4. Buscar el último correlativo de la semana anterior para cada centro médico
+    // 4. Find the last correlative number from the previous week for each medical center
     for (const mc of uniqueMedicalCenters) {
       let lastCorrelative = 0;
       if (week > 1) {
-        // La semana es mayor que 1, buscamos la última orden de la semana anterior.
-        // Primero, encontrar la orden padre (orderpreview) de la semana anterior,
-        // filtrando por año, mes y semana para mayor precisión.
+        // The week is greater than 1, we look for the last order from the previous week.
+        // First, find the parent order (orderpreview) from the previous week,
+        // filtering by year, month, and week for more accuracy.
         const { data: previousOrderPreviewData, error: prevOrderPreviewError } = await supabase
           .from('orderpreview')
           .select('order_id')
@@ -99,28 +98,28 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
           .single();
 
         if (prevOrderPreviewError || !previousOrderPreviewData) {
-          console.error(`Error o no se encontró el preview de orden para la semana ${week - 1}. El correlativo se reiniciará.`);
-          // Si no hay preview de orden para la semana anterior, el correlativo empieza en 0.
+          console.error(`Error or no order preview found for week ${week - 1}. The correlative number will be reset.`);
+          // If there's no order preview for the previous week, the correlative number starts at 0.
         } else {
           const previousOrderId = previousOrderPreviewData.order_id;
           
-          // Luego, buscar el último ref_patient de ese order_id para el centro médico actual.
+          // Then, look for the last ref_patient for that order_id and the current medical center.
           const { data: lastOrderData, error: lastOrderError } = await supabase
             .from('orderdetailpreview')
             .select('ref_patient')
             .eq('centre_medical', mc)
             .eq('order_id', previousOrderId)
-            .order('number', { ascending: false }) // Ordenamos por el campo numérico 'number' para asegurar la secuencia
+            .order('number', { ascending: false }) // We sort by the numeric field 'number' to ensure the sequence
             .limit(1);
 
           if (lastOrderError) {
-            console.error(`Error al buscar el último correlativo para el centro ${mc}:`, lastOrderError);
-            // El correlativo se mantiene en 0.
+            console.error(`Error searching for the last correlative for medical center ${mc}:`, lastOrderError);
+            // The correlative number remains at 0.
           }
           
           if (lastOrderData && lastOrderData.length > 0) {
             const lastRefPatient = lastOrderData[0].ref_patient;
-            // Extraemos los últimos 3 dígitos del string y los convertimos a número
+            // Extract the last 3 digits of the string and convert them to a number
             const correlativeString = lastRefPatient.slice(-3);
             lastCorrelative = parseInt(correlativeString, 10);
           }
@@ -131,9 +130,9 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
 
     const processedDetails = [];
 
-    // 4. Procesamos cada detalle de la orden de entrada
+    // 5. Process each order detail from the input
     for (const detail of orderDetails) {
-      // a. Obtener la abreviatura del centro médico
+      // a. Get the medical center abbreviation
       const { data: medicalCenterData, error: mcError } = await supabase
         .from('centremedical')
         .select('abbreviation')
@@ -141,12 +140,12 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
         .single();
 
       if (mcError || !medicalCenterData) {
-        console.error(`Centro médico no encontrado: ${detail.medical_center}`, mcError);
+        console.error(`Medical center not found: ${detail.medical_center}`, mcError);
         continue;
       }
       const abbreviation = (medicalCenterData as MedicalCenterAbbr).abbreviation;
 
-      // b. Obtener el código a partir de la nomenclatura
+      // b. Get the code from the nomenclature
       const { data: translationData, error: translationError } = await supabase
         .from('translation')
         .select('code_hw')
@@ -154,24 +153,24 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
         .limit(1);
 
       if (translationError || !translationData || translationData.length === 0) {
-        console.error(`Código no encontrado para la nomenclatura: ${detail.nomenclature}`, translationError);
+        console.error(`Code not found for nomenclature: ${detail.nomenclature}`, translationError);
         continue;
       }
       const code = (translationData[0] as TranslationCode).code_hw;
 
-      // c. Generar los números correlativos a partir del último valor
+      // c. Generate the correlative numbers from the last value
       medicalCenterCorrelatives[detail.medical_center]++;
       const correlativePatient = medicalCenterCorrelatives[detail.medical_center];
       const correlativeAnalyze = correlativePatient;
 
-      // d. Formatear los campos
+      // d. Format the fields
       const monthYear = `${String(month).padStart(2, '0')}${String(year).slice(-2)}`;
       const formattedCorrelative = String(correlativePatient).padStart(3, '0');
 
       const patientRef = `${abbreviation}HWF${monthYear}${formattedCorrelative}`;
       const analyzeRef = `${code}F${monthYear}${String(correlativeAnalyze).padStart(3, '0')}`;
 
-      // e. Construir el objeto de detalle de previsualización
+      // e. Build the preview detail object
       processedDetails.push({
         order_id: orderId,
         "number": correlativePatient,
@@ -184,82 +183,85 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
       });
     }
 
-    // 5. Insertamos los detalles de la orden de previsualización
+    // 6. Insert the order preview details
     const { data: detailData, error: detailError } = await supabase
       .from('orderdetailpreview')
       .insert(processedDetails)
       .select('*');
 
     if (detailError) {
-      console.error('Error al insertar los detalles de previsualización:', detailError);
-      return res.status(500).json({ error: 'Error al guardar los detalles de la orden.' });
+      console.error('Error inserting the preview details:', detailError);
+      return res.status(500).json({ error: 'Error saving the order details.' });
     }
 
     res.status(201).json({
-      message: 'Previsualización de órdenes creada exitosamente.',
+      message: 'Order preview created successfully.',
       orderId,
       orderDetails: detailData,
     });
 
   } catch (err: any) {
-    console.error('Excepción en createOrderPreview:', err);
-    res.status(500).json({ error: 'Error interno del servidor.' });
+    console.error('Exception in createOrderPreview:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
 };
 
-
+/**
+ * Function to get all order previews (only headers),
+ * filtered by year, month, and week.
+ */
 export const getAllOrderPreviews = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
   try {
-    // Los parámetros se obtienen de la query string (ej. ?year=2024&month=4&week=2)
+    // Parameters are obtained from the query string (e.g., ?year=2024&month=4&week=2)
     const { year, month, week } = req.query;
 
-    // Validación de parámetros de entrada
+    // Input parameter validation
     if (!year || !month || !week) {
-      return res.status(400).json({ error: 'Los parámetros year, month y week son obligatorios.' });
+      return res.status(400).json({ error: 'The parameters year, month, and week are mandatory.' });
     }
 
-    // Convertir los parámetros a números enteros
+    // Convert parameters to integers
     const yearNumber = parseInt(year as string, 10);
     const monthNumber = parseInt(month as string, 10);
     const weekNumber = parseInt(week as string, 10);
 
-    // Consulta a la tabla 'orderpreview'
+    // Query the 'orderpreview' table
     const { data: orderPreviews, error } = await supabase
       .from('orderpreview')
-      .select('*') // Solo obtenemos la cabecera de la orden
+      .select('*') // We only get the order header
       .eq('yearNumber', yearNumber)
       .eq('monthNumber', monthNumber)
       .eq('weekNumber', weekNumber)
-      .order('created_at', { ascending: false }); // Opcional: ordenar por fecha de creación
+      .order('created_at', { ascending: false }); // Optional: sort by creation date
 
     if (error) {
-      console.error('Error al obtener previsualizaciones de órdenes:', error);
-      return res.status(500).json({ error: 'Error al obtener las previsualizaciones de órdenes.' });
+      console.error('Error fetching order previews:', error);
+      return res.status(500).json({ error: 'Error fetching the order previews.' });
     }
     
-    // Si no hay datos, devolvemos un array vacío y un mensaje
+    // If there's no data, we return an empty array and a message
     if (!orderPreviews || orderPreviews.length === 0) {
-      return res.status(404).json({ message: 'No se encontraron previsualizaciones de órdenes para la semana especificada.', data: [] });
+      return res.status(404).json({ message: 'No order previews were found for the specified week.', data: [] });
     }
 
     res.status(200).json(orderPreviews);
 
   } catch (err: any) {
-    console.error('Excepción en getAllOrderPreviews:', err);
-    res.status(500).json({ error: 'Error interno del servidor.' });
+    console.error('Exception in getAllOrderPreviews:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
 };
 
 /**
- * Función para obtener los detalles de una previsualización de orden específica
- * a partir de su order_id.
+ * Function to get the details of a specific order preview
+ * from its order_id.
  */
 export const getOrderDetailPreviews = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
 
     if (!orderId) {
-      return res.status(400).json({ error: 'ID de orden es obligatorio.' });
+      return res.status(400).json({ error: 'Order ID is mandatory.' });
     }
     
     const { data: details, error } = await supabase
@@ -269,35 +271,35 @@ export const getOrderDetailPreviews = (supabase: SupabaseClient) => async (req: 
       .order('created_at', { ascending: true });
     
     if (error) {
-      console.error('Error al obtener los detalles de la previsualización:', error);
-      return res.status(500).json({ error: 'Error al obtener los detalles de la previsualización.' });
+      console.error('Error fetching preview details:', error);
+      return res.status(500).json({ error: 'Error fetching the preview details.' });
     }
 
     if (!details || details.length === 0) {
-      return res.status(404).json({ message: 'No se encontraron detalles para la previsualización de orden especificada.', data: [] });
+      return res.status(404).json({ message: 'No details were found for the specified order preview.', data: [] });
     }
 
     res.status(200).json(details);
 
   } catch (err: any) {
-    console.error('Excepción en getOrderDetailPreviews:', err);
-    res.status(500).json({ error: 'Error interno del servidor.' });
+    console.error('Exception in getOrderDetailPreviews:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
 };
 
 
 /**
- * Función que confirma una orden de previsualización y la mueve a las tablas finales.
+ * Function that confirms an order preview and moves it to the final tables.
  */
 export const confirmOrderPreview = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
 
     if (!orderId) {
-      return res.status(400).json({ error: 'El ID de la orden es requerido.' });
+      return res.status(400).json({ error: 'Order ID is required.' });
     }
 
-    // 1. Obtener los datos de previsualización
+    // 1. Get preview data
     const { data: previewData, error: previewError } = await supabase
       .from('orderpreview')
       .select('*')
@@ -305,8 +307,8 @@ export const confirmOrderPreview = (supabase: SupabaseClient) => async (req: Req
       .single();
 
     if (previewError || !previewData) {
-      console.error('Previsualización de orden no encontrada o error:', previewError);
-      return res.status(404).json({ error: 'Previsualización de orden no encontrada.' });
+      console.error('Order preview not found or error:', previewError);
+      return res.status(404).json({ error: 'Order preview not found.' });
     }
 
     const { data: detailPreviewData, error: detailPreviewError } = await supabase
@@ -315,12 +317,12 @@ export const confirmOrderPreview = (supabase: SupabaseClient) => async (req: Req
       .eq('order_id', orderId);
 
     if (detailPreviewError || !detailPreviewData || detailPreviewData.length === 0) {
-      console.error('Detalles de previsualización de orden no encontrados o error:', detailPreviewError);
-      return res.status(404).json({ error: 'Detalles de previsualización de orden no encontrados.' });
+      console.error('Order preview details not found or error:', detailPreviewError);
+      return res.status(404).json({ error: 'Order preview details not found.' });
     }
 
-    // 2. Insertar los datos en las tablas definitivas 'order' y 'orderdetail'
-    // Asumimos que las tablas finales tienen una estructura compatible.
+    // 2. Insert data into the final 'order' and 'orderdetail' tables
+    // We assume the final tables have a compatible structure.
     const { data: finalOrderData, error: finalOrderError } = await supabase
       .from('order')
       .insert({
@@ -333,13 +335,13 @@ export const confirmOrderPreview = (supabase: SupabaseClient) => async (req: Req
       .select('order_id');
 
     if (finalOrderError) {
-      console.error('Error al insertar la orden final:', finalOrderError);
-      return res.status(500).json({ error: 'Error al confirmar la orden.' });
+      console.error('Error inserting final order:', finalOrderError);
+      return res.status(500).json({ error: 'Error confirming the order.' });
     }
 
     const finalOrderId = finalOrderData[0].order_id;
     
-    // Mapeamos los datos de los detalles para la inserción final
+    // Map the detail data for the final insertion
     const finalDetailData = detailPreviewData.map(detail => ({
       order_id: finalOrderId,
       "number": detail.number,
@@ -356,20 +358,20 @@ export const confirmOrderPreview = (supabase: SupabaseClient) => async (req: Req
       .insert(finalDetailData);
 
     if (finalDetailsError) {
-      console.error('Error al insertar los detalles de la orden final:', finalDetailsError);
-      return res.status(500).json({ error: 'Error al confirmar los detalles de la orden.' });
+      console.error('Error inserting final order details:', finalDetailsError);
+      return res.status(500).json({ error: 'Error confirming the order details.' });
     }
 
-    // 3. Eliminar los datos de previsualización
+    // 3. Delete the preview data
     const { error: deleteDetailsError } = await supabase
       .from('orderdetailpreview')
       .delete()
       .eq('order_id', orderId);
 
     if (deleteDetailsError) {
-      console.error('Error al eliminar los detalles de previsualización:', deleteDetailsError);
-      // No devolvemos un error 500, ya que la orden principal ya se insertó.
-      // Simplemente lo registramos para limpieza futura.
+      console.error('Error deleting preview details:', deleteDetailsError);
+      // We don't return a 500 error, as the main order was already inserted.
+      // We simply log it for future cleanup.
     }
 
     const { error: deleteOrderError } = await supabase
@@ -378,16 +380,16 @@ export const confirmOrderPreview = (supabase: SupabaseClient) => async (req: Req
       .eq('order_id', orderId);
 
     if (deleteOrderError) {
-      console.error('Error al eliminar la orden de previsualización:', deleteOrderError);
+      console.error('Error deleting order preview:', deleteOrderError);
     }
 
     res.status(200).json({
-      message: 'Orden confirmada y guardada exitosamente.',
+      message: 'Order confirmed and saved successfully.',
       orderId: finalOrderId,
     });
 
   } catch (err: any) {
-    console.error('Excepción en confirmOrderPreview:', err);
-    res.status(500).json({ error: 'Error interno del servidor.' });
+    console.error('Exception in confirmOrderPreview:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
 };
