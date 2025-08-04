@@ -143,7 +143,7 @@ export const loginUser = (supabase: SupabaseClient) => async (req: Request, res:
         // You can add more fields if you need them in the token, but keep it light
       },
       JWT_SECRET,
-      { expiresIn: '1h' } // The token will expire in 1 hour
+      { expiresIn: '6h' } // The token will expire in 1 hour
     );
 
     // 5. Successful response with the token
