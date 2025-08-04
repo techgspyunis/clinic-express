@@ -26,6 +26,7 @@ import { // Importamos los controladores administrativos
   deleteAdministrative,
   uploadLabFile,
 } from './controllers/administrativeController';
+import { confirmOrderPreview, createOrderPreview } from './controllers/orderPreviewController';
 
 // 1. Cargar variables de entorno
 dotenv.config();
@@ -94,6 +95,11 @@ app.get('/administratives', authenticateToken, getAllAdministratives(supabase));
 app.get('/administratives/:administrativeId/results', authenticateToken, getAdministrativeResultsById(supabase));
 app.delete('/administratives/:administrativeId', authenticateToken, deleteAdministrative(supabase));
 app.post('/upload-lab-file', authenticateToken, upload.single('file'), uploadLabFile(supabase));
+
+
+// --- NUEVA RUTA: Endpoint para crear una previsualización de órdenes
+app.post('/orders/preview', authenticateToken, createOrderPreview(supabase));
+app.post('/orders/confirm/:orderId', authenticateToken, confirmOrderPreview(supabase));
 
 // 7. Iniciar el servidor
 app.listen(PORT, () => {
