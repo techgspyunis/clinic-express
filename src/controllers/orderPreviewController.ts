@@ -408,3 +408,58 @@ export const confirmOrderPreview = (supabase: SupabaseClient) => async (req: Req
     res.status(500).json({ error: 'Internal server error.' });
   }
 };
+
+
+export const deactivateOrderPreview = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      return res.status(400).json({ error: 'Order ID is mandatory.' });
+    }
+
+    // Check if the order exists and is not already inactive
+    const { data: existingOrder, error: fetchError } = await supabase
+      .from('orderpreview')
+      .select('is_active')
+      .eq('order_id', orderId)
+      .single();
+
+    if (fetchError || !existingOrder) {
+      console.error('Order preview not found or error fetching:', fetchError);
+      return res.status(404).json({ error: 'Order preview not found.' });
+    }
+
+    if (!existingOrder.is_active) {
+      return res.status(409).json({ message: 'Order preview is already inactive.' });
+    }
+
+    // Update details the is_active status to false
+    const { error: updateDetailError } = await supabase
+      .from('orderdetailpreview')
+      .update({ is_active: false })
+      .eq('order_id', orderId)
+      .select();
+
+
+    // Update the is_active status to false
+    const { data, error: updateError } = await supabase
+      .from('orderpreview')
+      .update({ is_active: false })
+      .eq('order_id', orderId)
+      .select();
+
+    if (updateError) {
+      console.error('Error deactivating order preview:', updateError);
+      return res.status(500).json({ error: 'Error deactivating the order preview.' });
+    }
+
+
+
+    res.status(200).json({ message: 'Order preview deactivated successfully.', data });
+
+  } catch (err: any) {
+    console.error('Exception in deactivateOrderPreview:', err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+};

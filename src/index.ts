@@ -26,7 +26,11 @@ import { // Importamos los controladores administrativos
   deleteAdministrative,
   uploadLabFile,
 } from './controllers/administrativeController';
-import { confirmOrderPreview, createOrderPreview, getAllOrderPreviews, getOrderDetailPreviews } from './controllers/orderPreviewController';
+import { confirmOrderPreview, createOrderPreview, deactivateOrderPreview, getAllOrderPreviews, getOrderDetailPreviews } from './controllers/orderPreviewController';
+import { createMedicalCenter, deactivateMedicalCenter, getAllMedicalCenters, getMedicalCenterById, updateMedicalCenter } from './controllers/centreMedicalController';
+import { createTranslationLabo, deactivateTranslationLabo, getAllTranslationLabo, getTranslationLaboById, updateTranslationLabo } from './controllers/translationLaboController';
+import { createTranslation, deactivateTranslation, getAllTranslations, getTranslationById, updateTranslation } from './controllers/translationController';
+import { createTranslationHw, deactivateTranslationHw, getAllTranslationHw, getTranslationHwById, updateTranslationHw } from './controllers/translationHwController';
 
 // 1. Cargar variables de entorno
 dotenv.config();
@@ -101,7 +105,60 @@ app.post('/upload-lab-file', authenticateToken, upload.single('file'), uploadLab
 app.get('/order-previews', authenticateToken, getAllOrderPreviews(supabase));
 app.get('/order-previews/:orderId/details', authenticateToken, getOrderDetailPreviews(supabase));
 app.post('/order-previews', authenticateToken, createOrderPreview(supabase));
+app.delete('/order-previews/:orderId', authenticateToken, deactivateOrderPreview(supabase));
 app.post('/orders/confirm/:orderId', authenticateToken, confirmOrderPreview(supabase));
+
+
+// --- Medical Speciality Routes ---
+// Create a new medical speciality
+app.post('/centre-medical',authenticateToken, createMedicalCenter(supabase));
+// Get all active medical specialities
+app.get('/centre-medical',authenticateToken, getAllMedicalCenters(supabase));
+// Get a specific medical speciality by ID
+app.get('/centre-medical/:centreId',authenticateToken, getMedicalCenterById(supabase));
+// Update a medical speciality by ID
+app.put('/centre-medical/:centreId',authenticateToken, updateMedicalCenter(supabase));
+// Deactivate a medical speciality by ID (soft delete)
+app.delete('/centre-medical/:centreId',authenticateToken, deactivateMedicalCenter(supabase));
+
+
+// --- Translation Labo Routes ---
+// Create a new translation laboratory record
+app.post('/translationLabos', authenticateToken,createTranslationLabo(supabase));
+// Get all active translation laboratory records
+app.get('/translationLabos',authenticateToken, getAllTranslationLabo(supabase));
+// Get a specific translation laboratory record by ID
+app.get('/translationLabos/:laboId',authenticateToken, getTranslationLaboById(supabase));
+// Update a translation laboratory record by ID
+app.put('/translationLabos/:laboId',authenticateToken, updateTranslationLabo(supabase));
+// Deactivate a translation laboratory record by ID (soft delete)
+app.delete('/translationLabos/:laboId',authenticateToken, deactivateTranslationLabo(supabase));
+
+
+// --- Translation Hardware Routes ---
+// Create a new translation hardware record
+app.post('/translationHw', authenticateToken,createTranslationHw(supabase));
+// Get all active translation hardware records
+app.get('/translationHw',authenticateToken, getAllTranslationHw(supabase));
+// Get a specific translation hardware record by ID
+app.get('/translationHw/:hwId',authenticateToken, getTranslationHwById(supabase));
+// Update a translation hardware record by ID
+app.put('/translationHw/:hwId',authenticateToken, updateTranslationHw(supabase));
+// Deactivate a translation hardware record by ID (soft delete)
+app.delete('/translationHw/:hwId',authenticateToken, deactivateTranslationHw(supabase));
+
+// --- Translation Routes ---
+// Create a new translation record
+app.post('/translations', authenticateToken,createTranslation(supabase));
+// Get all active translation records
+app.get('/translations',authenticateToken, getAllTranslations(supabase));
+// Get a specific translation record by ID
+app.get('/translations/:translationId', authenticateToken,getTranslationById(supabase));
+// Update a translation record by ID
+app.put('/translations/:translationId', authenticateToken,updateTranslation(supabase));
+// Deactivate a translation record by ID (soft delete)
+app.delete('/translations/:translationId',authenticateToken, deactivateTranslation(supabase));
+
 
 // 7. Iniciar el servidor
 app.listen(PORT, () => {
