@@ -25,6 +25,13 @@ interface TranslationCode {
   code_hw: string;
 }
 
+interface PatientData {
+  correlativePatient: number;
+  patientRef: string;
+  analyzeRef: string;
+  code: string;
+}
+
 /**
  * Function that creates an order preview from a 3-column input format.
  * It generates the missing fields (number, references, code) and saves them in preview tables.
@@ -86,8 +93,6 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
       let lastCorrelative = 0;
       if (week > 1) {
         // The week is greater than 1, we look for the last order from the previous week.
-        // First, find the parent order (orderpreview) from the previous week,
-        // filtering by year, month, and week for more accuracy.
         const { data: previousOrderPreviewData, error: prevOrderPreviewError } = await supabase
           .from('orderpreview')
           .select('order_id')
@@ -99,27 +104,23 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
 
         if (prevOrderPreviewError || !previousOrderPreviewData) {
           console.error(`Error or no order preview found for week ${week - 1}. The correlative number will be reset.`);
-          // If there's no order preview for the previous week, the correlative number starts at 0.
         } else {
           const previousOrderId = previousOrderPreviewData.order_id;
           
-          // Then, look for the last ref_patient for that order_id and the current medical center.
           const { data: lastOrderData, error: lastOrderError } = await supabase
             .from('orderdetailpreview')
             .select('ref_patient')
             .eq('centre_medical', mc)
             .eq('order_id', previousOrderId)
-            .order('number', { ascending: false }) // We sort by the numeric field 'number' to ensure the sequence
+            .order('number', { ascending: false })
             .limit(1);
 
           if (lastOrderError) {
             console.error(`Error searching for the last correlative for medical center ${mc}:`, lastOrderError);
-            // The correlative number remains at 0.
           }
           
           if (lastOrderData && lastOrderData.length > 0) {
             const lastRefPatient = lastOrderData[0].ref_patient;
-            // Extract the last 3 digits of the string and convert them to a number
             const correlativeString = lastRefPatient.slice(-3);
             lastCorrelative = parseInt(correlativeString, 10);
           }
@@ -129,57 +130,73 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
     }
 
     const processedDetails = [];
+    const patientDataMap: { [key: string]: PatientData } = {};
 
-    // 5. Process each order detail from the input
+    // 5. Process each order detail from the input, ensuring one correlative per patient
     for (const detail of orderDetails) {
-      // a. Get the medical center abbreviation
-      const { data: medicalCenterData, error: mcError } = await supabase
-        .from('centremedical')
-        .select('abbreviation')
-        .eq('name', detail.medical_center)
-        .single();
+      let currentPatientData = patientDataMap[detail.patient_name];
 
-      if (mcError || !medicalCenterData) {
-        console.error(`Medical center not found: ${detail.medical_center}`, mcError);
-        continue;
+      // If the patient has not been processed in this preview, we generate new correlatives.
+      if (!currentPatientData) {
+        // a. Get the medical center abbreviation
+        const { data: medicalCenterData, error: mcError } = await supabase
+          .from('centremedical')
+          .select('abbreviation')
+          .eq('name', detail.medical_center)
+          .single();
+
+        if (mcError || !medicalCenterData) {
+          console.error(`Medical center not found: ${detail.medical_center}`, mcError);
+          continue;
+        }
+        const abbreviation = (medicalCenterData as MedicalCenterAbbr).abbreviation;
+
+        // b. Generate the correlative numbers from the last value
+        medicalCenterCorrelatives[detail.medical_center]++;
+        const correlativePatient = medicalCenterCorrelatives[detail.medical_center];
+
+        // c. Format the fields
+        const monthYear = `${String(month).padStart(2, '0')}${String(year).slice(-2)}`;
+        const formattedCorrelative = String(correlativePatient).padStart(3, '0');
+
+        const patientRef = `${abbreviation}HWF${monthYear}${formattedCorrelative}`;
+        
+        // d. Get the code from the nomenclature
+        const { data: translationData, error: translationError } = await supabase
+          .from('translation')
+          .select('code_hw')
+          .eq('name', detail.nomenclature)
+          .limit(1);
+
+        if (translationError || !translationData || translationData.length === 0) {
+          console.error(`Code not found for nomenclature: ${detail.nomenclature}`, translationError);
+          continue;
+        }
+        const code = (translationData[0] as TranslationCode).code_hw;
+
+        // e. Generate the correlative and analysis reference
+        const analyzeRef = `${code}F${monthYear}${formattedCorrelative}`;
+
+        currentPatientData = {
+          correlativePatient,
+          patientRef,
+          analyzeRef,
+          code,
+        };
+        // Save the patient data for reuse
+        patientDataMap[detail.patient_name] = currentPatientData;
       }
-      const abbreviation = (medicalCenterData as MedicalCenterAbbr).abbreviation;
-
-      // b. Get the code from the nomenclature
-      const { data: translationData, error: translationError } = await supabase
-        .from('translation')
-        .select('code_hw')
-        .eq('name', detail.nomenclature)
-        .limit(1);
-
-      if (translationError || !translationData || translationData.length === 0) {
-        console.error(`Code not found for nomenclature: ${detail.nomenclature}`, translationError);
-        continue;
-      }
-      const code = (translationData[0] as TranslationCode).code_hw;
-
-      // c. Generate the correlative numbers from the last value
-      medicalCenterCorrelatives[detail.medical_center]++;
-      const correlativePatient = medicalCenterCorrelatives[detail.medical_center];
-      const correlativeAnalyze = correlativePatient;
-
-      // d. Format the fields
-      const monthYear = `${String(month).padStart(2, '0')}${String(year).slice(-2)}`;
-      const formattedCorrelative = String(correlativePatient).padStart(3, '0');
-
-      const patientRef = `${abbreviation}HWF${monthYear}${formattedCorrelative}`;
-      const analyzeRef = `${code}F${monthYear}${String(correlativeAnalyze).padStart(3, '0')}`;
-
-      // e. Build the preview detail object
+      
+      // f. Build the preview detail object
       processedDetails.push({
         order_id: orderId,
-        "number": correlativePatient,
+        "number": currentPatientData.correlativePatient,
         centre_medical: detail.medical_center,
-        ref_patient: patientRef,
+        ref_patient: currentPatientData.patientRef,
         name_patient: detail.patient_name,
-        ref_analyze: analyzeRef,
+        ref_analyze: currentPatientData.analyzeRef,
         nomenclature_examen: detail.nomenclature,
-        code: code,
+        code: currentPatientData.code,
       });
     }
 
@@ -370,8 +387,6 @@ export const confirmOrderPreview = (supabase: SupabaseClient) => async (req: Req
 
     if (deleteDetailsError) {
       console.error('Error deleting preview details:', deleteDetailsError);
-      // We don't return a 500 error, as the main order was already inserted.
-      // We simply log it for future cleanup.
     }
 
     const { error: deleteOrderError } = await supabase
