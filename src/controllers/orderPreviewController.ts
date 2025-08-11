@@ -52,6 +52,7 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
       .eq('yearNumber', year)
       .eq('monthNumber', month)
       .eq('weekNumber', week)
+      .eq('is_active', true) 
       .limit(1);
 
     if (existingError) {
@@ -99,6 +100,7 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
           .eq('yearNumber', year)
           .eq('monthNumber', month)
           .eq('weekNumber', week - 1)
+          .eq('is_active', true) 
           .limit(1)
           .single();
 
@@ -112,6 +114,7 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
             .select('ref_patient')
             .eq('centre_medical', mc)
             .eq('order_id', previousOrderId)
+            .eq('is_active', true) 
             .order('number', { ascending: false })
             .limit(1);
 
@@ -143,6 +146,7 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
           .from('centremedical')
           .select('abbreviation')
           .eq('name', detail.medical_center)
+          .eq('is_active', true) 
           .single();
 
         if (mcError || !medicalCenterData) {
@@ -166,6 +170,7 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
           .from('translation')
           .select('code_hw')
           .eq('name', detail.nomenclature)
+          .eq('is_active', true) 
           .limit(1);
 
         if (translationError || !translationData || translationData.length === 0) {
@@ -249,6 +254,7 @@ export const getAllOrderPreviews = (supabase: SupabaseClient) => async (req: Req
       .eq('yearNumber', yearNumber)
       .eq('monthNumber', monthNumber)
       .eq('weekNumber', weekNumber)
+      .eq('is_active', true) 
       .order('created_at', { ascending: false }); // Optional: sort by creation date
 
     if (error) {
@@ -285,6 +291,7 @@ export const getOrderDetailPreviews = (supabase: SupabaseClient) => async (req: 
       .from('orderdetailpreview')
       .select('*')
       .eq('order_id', orderId)
+      .eq('is_active', true) 
       .order('created_at', { ascending: true });
     
     if (error) {
