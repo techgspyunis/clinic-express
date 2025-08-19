@@ -32,11 +32,10 @@ type TranslationAliasWithCode = {
   };
 };
 
-interface PatientData {
+// Interface to store patient data for correlative generation
+interface PatientCorrelativeData {
   correlativePatient: number;
   patientRef: string;
-  analyzeRef: string;
-  code: string;
 }
 
 /**
@@ -140,14 +139,19 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
     }
 
     const processedDetails = [];
-    const patientDataMap: { [key: string]: PatientData } = {};
+    // Only store patient correlative data, not the code
+    const patientCorrelativeMap: { [key: string]: PatientCorrelativeData } = {};
+    let tableRowNumber = 0; // New counter for the table row number
 
-    // 5. Process each order detail from the input, ensuring one correlative per patient
+    // 5. Process each order detail from the input
     for (const detail of orderDetails) {
-      let currentPatientData = patientDataMap[detail.patient_name];
-
+      tableRowNumber++; // Increment the table row number for each detail line
+      let currentPatientCorrelativeData = patientCorrelativeMap[detail.patient_name];
+      let correlativePatient = 0;
+      let patientRef = "";
+      
       // If the patient has not been processed in this preview, we generate new correlatives.
-      if (!currentPatientData) {
+      if (!currentPatientCorrelativeData) {
         // a. Get the medical center abbreviation
         const { data: medicalCenterData, error: mcError } = await supabase
           .from('centremedical')
@@ -164,55 +168,58 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
 
         // b. Generate the correlative numbers from the last value
         medicalCenterCorrelatives[detail.medical_center]++;
-        const correlativePatient = medicalCenterCorrelatives[detail.medical_center];
+        correlativePatient = medicalCenterCorrelatives[detail.medical_center];
 
-        // c. Format the fields
+        // c. Format the patient reference field
         const monthYear = `${String(month).padStart(2, '0')}${String(year).slice(-2)}`;
         const formattedCorrelative = String(correlativePatient).padStart(3, '0');
+        patientRef = `${abbreviation}HWF${monthYear}${formattedCorrelative}`;
 
-        const patientRef = `${abbreviation}HWF${monthYear}${formattedCorrelative}`;
-        
-        // d. Get the code from the nomenclature
-        const { data: translationData, error: translationError } = await supabase
-          .from('translation_alias')
-          .select('translation(code_hw)')
-          .eq('name', detail.nomenclature)
-          .eq('is_active', true)
-          .single<TranslationAliasWithCode>();
-
-        let code = "PENDIENTE"; // Default value for code
-
-        if (translationError) {
-          // The alias was not found, so we log the error and keep the default value
-          console.error(`Code not found for nomenclature: ${detail.nomenclature}`, translationError);
-        } else if (translationData && translationData.translation && translationData.translation.code_hw) {
-          // Extract the code_hw from the nested object
-          code = translationData.translation.code_hw;
-        }
-
-        // e. Generate the correlative and analysis reference
-        const analyzeRef = `${code}F${monthYear}${formattedCorrelative}`;
-
-        currentPatientData = {
+        // Save the patient correlative data for reuse
+        currentPatientCorrelativeData = {
           correlativePatient,
           patientRef,
-          analyzeRef,
-          code,
         };
-        // Save the patient data for reuse
-        patientDataMap[detail.patient_name] = currentPatientData;
+        patientCorrelativeMap[detail.patient_name] = currentPatientCorrelativeData;
+      } else {
+        // If the patient has already been processed, reuse the existing correlative data.
+        correlativePatient = currentPatientCorrelativeData.correlativePatient;
+        patientRef = currentPatientCorrelativeData.patientRef;
       }
       
+      // d. Get the code from the nomenclature for EACH detail line
+      const { data: translationData, error: translationError } = await supabase
+        .from('translation_alias')
+        .select('translation(code_hw)')
+        .eq('name', detail.nomenclature)
+        .eq('is_active', true)
+        .single<TranslationAliasWithCode>();
+
+      let code = "NOT FOUND"; // Default value for code
+
+      if (translationError) {
+        // The alias was not found, so we log the error and keep the default value
+        console.error(`Code not found for nomenclature: ${detail.nomenclature}`, translationError);
+      } else if (translationData && translationData.translation && translationData.translation.code_hw) {
+        // Extract the code_hw from the nested object
+        code = translationData.translation.code_hw;
+      }
+
+      // e. Generate the analysis reference using the new code
+      const monthYear = `${String(month).padStart(2, '0')}${String(year).slice(-2)}`;
+      const formattedCorrelative = String(correlativePatient).padStart(3, '0');
+      const analyzeRef = `${code}F${monthYear}${formattedCorrelative}`;
+
       // f. Build the preview detail object
       processedDetails.push({
         order_id: orderId,
-        "number": currentPatientData.correlativePatient,
+        "number": tableRowNumber, // Use the new table row number
         centre_medical: detail.medical_center,
-        ref_patient: currentPatientData.patientRef,
+        ref_patient: patientRef,
         name_patient: detail.patient_name,
-        ref_analyze: currentPatientData.analyzeRef,
+        ref_analyze: analyzeRef,
         nomenclature_examen: detail.nomenclature,
-        code: currentPatientData.code,
+        code: code, // Use the specific code found for this nomenclature
       });
     }
 
