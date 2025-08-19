@@ -25,6 +25,13 @@ interface TranslationCode {
   code_hw: string;
 }
 
+// Update the interface to reflect the nested structure from the join query
+type TranslationAliasWithCode = {
+  translation: {
+    code_hw: string; // The type of code_hw is string
+  };
+};
+
 interface PatientData {
   correlativePatient: number;
   patientRef: string;
@@ -166,18 +173,19 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
         const patientRef = `${abbreviation}HWF${monthYear}${formattedCorrelative}`;
         
         // d. Get the code from the nomenclature
-        const { data: translationData, error: translationError } = await supabase
-          .from('translation')
-          .select('code_hw')
-          .eq('name', detail.nomenclature)
-          .eq('is_active', true) 
-          .limit(1);
+const { data: translationData, error: translationError } = await supabase
+  .from('translation_alias')
+  .select('translation(code_hw)')
+  .eq('name', detail.nomenclature)
+  .eq('is_active', true)
+  .single<TranslationAliasWithCode>();
 
-        if (translationError || !translationData || translationData.length === 0) {
+        if (translationError || !translationData) {
           console.error(`Code not found for nomenclature: ${detail.nomenclature}`, translationError);
           continue;
         }
-        const code = (translationData[0] as TranslationCode).code_hw;
+        // Extract the code_hw from the nested object
+        const code = translationData?.translation.code_hw;
 
         // e. Generate the correlative and analysis reference
         const analyzeRef = `${code}F${monthYear}${formattedCorrelative}`;

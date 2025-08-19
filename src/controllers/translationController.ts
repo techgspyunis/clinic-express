@@ -61,19 +61,33 @@ export const createTranslation = (supabase: SupabaseClient) => async (req: Reque
     }
 
     // 3. Insert the new record into the database
-    const { data, error } = await supabase
+    const { data: translationData, error: translationError} = await supabase
       .from('translation')
       .insert({ name, code_labo, code_hw })
       .select();
 
-    if (error) {
-      console.error('Error creating translation:', error);
+    if (translationError) {
+      console.error('Error creating translation:', translationError);
       return res.status(500).json({ error: 'Internal server error while creating the translation.' });
+    }
+
+    const newTranslation = translationData[0];
+    const translationId = newTranslation.translation_id;
+
+    // 4. Insert the default alias using the new translation's ID and name
+    const { error: aliasError } = await supabase
+      .from('translation_alias')
+      .insert({ translation_id: translationId, name: newTranslation.name });
+
+    if (aliasError) {
+      console.error('Error creating default alias:', aliasError);
+      // Optional: Handle cleanup of the parent record if alias creation fails
+      return res.status(500).json({ error: 'Internal server error while creating the default alias.' });
     }
 
     res.status(201).json({
       message: 'Translation created successfully.',
-      data: data[0],
+      data: newTranslation
     });
 
   } catch (err: any) {
