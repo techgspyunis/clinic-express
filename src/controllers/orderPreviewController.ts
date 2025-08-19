@@ -59,7 +59,7 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
       .eq('yearNumber', year)
       .eq('monthNumber', month)
       .eq('weekNumber', week)
-      .eq('is_active', true) 
+      .eq('is_active', true)
       .limit(1);
 
     if (existingError) {
@@ -107,7 +107,7 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
           .eq('yearNumber', year)
           .eq('monthNumber', month)
           .eq('weekNumber', week - 1)
-          .eq('is_active', true) 
+          .eq('is_active', true)
           .limit(1)
           .single();
 
@@ -121,7 +121,7 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
             .select('ref_patient')
             .eq('centre_medical', mc)
             .eq('order_id', previousOrderId)
-            .eq('is_active', true) 
+            .eq('is_active', true)
             .order('number', { ascending: false })
             .limit(1);
 
@@ -153,7 +153,7 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
           .from('centremedical')
           .select('abbreviation')
           .eq('name', detail.medical_center)
-          .eq('is_active', true) 
+          .eq('is_active', true)
           .single();
 
         if (mcError || !medicalCenterData) {
@@ -173,19 +173,22 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
         const patientRef = `${abbreviation}HWF${monthYear}${formattedCorrelative}`;
         
         // d. Get the code from the nomenclature
-const { data: translationData, error: translationError } = await supabase
-  .from('translation_alias')
-  .select('translation(code_hw)')
-  .eq('name', detail.nomenclature)
-  .eq('is_active', true)
-  .single<TranslationAliasWithCode>();
+        const { data: translationData, error: translationError } = await supabase
+          .from('translation_alias')
+          .select('translation(code_hw)')
+          .eq('name', detail.nomenclature)
+          .eq('is_active', true)
+          .single<TranslationAliasWithCode>();
 
-        if (translationError || !translationData) {
+        let code = "PENDIENTE"; // Default value for code
+
+        if (translationError) {
+          // The alias was not found, so we log the error and keep the default value
           console.error(`Code not found for nomenclature: ${detail.nomenclature}`, translationError);
-          continue;
+        } else if (translationData && translationData.translation && translationData.translation.code_hw) {
+          // Extract the code_hw from the nested object
+          code = translationData.translation.code_hw;
         }
-        // Extract the code_hw from the nested object
-        const code = translationData?.translation.code_hw;
 
         // e. Generate the correlative and analysis reference
         const analyzeRef = `${code}F${monthYear}${formattedCorrelative}`;
@@ -262,7 +265,7 @@ export const getAllOrderPreviews = (supabase: SupabaseClient) => async (req: Req
       .eq('yearNumber', yearNumber)
       .eq('monthNumber', monthNumber)
       .eq('weekNumber', weekNumber)
-      .eq('is_active', true) 
+      .eq('is_active', true)
       .order('created_at', { ascending: false }); // Optional: sort by creation date
 
     if (error) {
@@ -299,7 +302,7 @@ export const getOrderDetailPreviews = (supabase: SupabaseClient) => async (req: 
       .from('orderdetailpreview')
       .select('*')
       .eq('order_id', orderId)
-      .eq('is_active', true) 
+      .eq('is_active', true)
       .order('created_at', { ascending: true });
     
     if (error) {
@@ -468,7 +471,6 @@ export const deactivateOrderPreview = (supabase: SupabaseClient) => async (req: 
       console.error('Error deactivating order preview:', updateError);
       return res.status(500).json({ error: 'Error deactivating the order preview.' });
     }
-
 
 
     res.status(200).json({ message: 'Order preview deactivated successfully.', data });
