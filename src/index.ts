@@ -19,6 +19,14 @@ import { // Importamos invoices
   deleteInvoice,
   updateInvoicePaymentStatus,
 } from './controllers/invoiceController';
+// Import controller functions for translation_alias (the new controller)
+import {
+  createTranslationAlias,
+  getAllTranslationAliases,
+  getTranslationAliasById,
+  updateTranslationAlias,
+  deactivateTranslationAlias
+} from './controllers/translationAliasController';
 import { // Importamos los controladores administrativos
   createAdministrativeWithResults,
   getAllAdministratives,
@@ -158,6 +166,19 @@ app.get('/translations/:translationId', authenticateToken,getTranslationById(sup
 app.put('/translations/:translationId', authenticateToken,updateTranslation(supabase));
 // Deactivate a translation record by ID (soft delete)
 app.delete('/translations/:translationId',authenticateToken, deactivateTranslation(supabase));
+
+
+// --- Translation Alias Routes ---
+// Create a new translation alias record
+app.post('/translationAliases', createTranslationAlias(supabase));
+// Get all active translation alias records
+app.get('/translationAliases/:translationId/aliases', getAllTranslationAliases(supabase));
+// Get a specific translation alias record by ID
+app.get('/translationAliases/:aliasId', getTranslationAliasById(supabase));
+// Update a translation alias record by ID
+app.put('/translationAliases/:aliasId', updateTranslationAlias(supabase));
+// Deactivate a translation alias record by ID (soft delete)
+app.delete('/translationAliases/:aliasId', deactivateTranslationAlias(supabase));
 
 
 // 7. Iniciar el servidor
