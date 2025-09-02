@@ -193,6 +193,7 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
         .select('translation(code_hw)')
         .eq('name', detail.nomenclature)
         .eq('is_active', true)
+        .limit(1)
         .single<TranslationAliasWithCode>();
 
       let code = "NOT FOUND"; // Default value for code
@@ -253,17 +254,16 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
 export const getAllOrderPreviews = (supabase: SupabaseClient) => async (req: Request, res: Response) => {
   try {
     // Parameters are obtained from the query string (e.g., ?year=2024&month=4&week=2)
-    const { year, month, week } = req.query;
+    const { year, month} = req.query;
 
     // Input parameter validation
-    if (!year || !month || !week) {
+    if (!year || !month ) {
       return res.status(400).json({ error: 'The parameters year, month, and week are mandatory.' });
     }
 
     // Convert parameters to integers
     const yearNumber = parseInt(year as string, 10);
     const monthNumber = parseInt(month as string, 10);
-    const weekNumber = parseInt(week as string, 10);
 
     // Query the 'orderpreview' table
     const { data: orderPreviews, error } = await supabase
@@ -271,9 +271,8 @@ export const getAllOrderPreviews = (supabase: SupabaseClient) => async (req: Req
       .select('*') // We only get the order header
       .eq('yearNumber', yearNumber)
       .eq('monthNumber', monthNumber)
-      .eq('weekNumber', weekNumber)
       .eq('is_active', true)
-      .order('created_at', { ascending: false }); // Optional: sort by creation date
+      .order('weekNumber', { ascending: true }); // Optional: sort by creation date
 
     if (error) {
       console.error('Error fetching order previews:', error);
