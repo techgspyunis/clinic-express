@@ -156,19 +156,19 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
         const { data: medicalCenterData, error: mcError } = await supabase
           .from('centremedical')
           .select('abbreviation')
-          .eq('name', detail.medical_center)
+          .eq('name', detail.medical_center.trim())
           .eq('is_active', true)
           .single();
 
         if (mcError || !medicalCenterData) {
-          console.error(`Medical center not found: ${detail.medical_center}`, mcError);
+          console.error(`Medical center not found: ${detail.medical_center.trim()}`, mcError);
           continue;
         }
         const abbreviation = (medicalCenterData as MedicalCenterAbbr).abbreviation;
 
         // b. Generate the correlative numbers from the last value
-        medicalCenterCorrelatives[detail.medical_center]++;
-        correlativePatient = medicalCenterCorrelatives[detail.medical_center];
+        medicalCenterCorrelatives[detail.medical_center.trim()]++;
+        correlativePatient = medicalCenterCorrelatives[detail.medical_center.trim()];
 
         // c. Format the patient reference field
         const monthYear = `${String(month).padStart(2, '0')}${String(year).slice(-2)}`;
@@ -180,7 +180,7 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
           correlativePatient,
           patientRef,
         };
-        patientCorrelativeMap[detail.patient_name] = currentPatientCorrelativeData;
+        patientCorrelativeMap[detail.patient_name.trim()] = currentPatientCorrelativeData;
       } else {
         // If the patient has already been processed, reuse the existing correlative data.
         correlativePatient = currentPatientCorrelativeData.correlativePatient;
@@ -191,7 +191,7 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
       const { data: translationData, error: translationError } = await supabase
         .from('translation_alias')
         .select('translation(code_hw)')
-        .eq('name', detail.nomenclature)
+        .eq('name', detail.nomenclature.trim())
         .eq('is_active', true)
         .limit(1)
         .single<TranslationAliasWithCode>();
@@ -200,10 +200,10 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
 
       if (translationError) {
         // The alias was not found, so we log the error and keep the default value
-        console.error(`Code not found for nomenclature: ${detail.nomenclature}`, translationError);
-      } else if (translationData && translationData.translation && translationData.translation.code_hw) {
+        console.error(`Code not found for nomenclature: ${detail.nomenclature.trim()}`, translationError);
+      } else if (translationData && translationData.translation && translationData.translation.code_hw.trim()) {
         // Extract the code_hw from the nested object
-        code = translationData.translation.code_hw;
+        code = translationData.translation.code_hw.trim();
       }
 
       // e. Generate the analysis reference using the new code
@@ -215,12 +215,12 @@ export const createOrderPreview = (supabase: SupabaseClient) => async (req: Requ
       processedDetails.push({
         order_id: orderId,
         "number": tableRowNumber, // Use the new table row number
-        centre_medical: detail.medical_center,
-        ref_patient: patientRef,
-        name_patient: detail.patient_name,
-        ref_analyze: analyzeRef,
-        nomenclature_examen: detail.nomenclature,
-        code: code, // Use the specific code found for this nomenclature
+        centre_medical: detail.medical_center.trim(),
+        ref_patient: patientRef.trim(),
+        name_patient: detail.patient_name.trim(),
+        ref_analyze: analyzeRef.trim(),
+        nomenclature_examen: detail.nomenclature.trim(),
+        code: code.trim(), // Use the specific code found for this nomenclature
       });
     }
 
