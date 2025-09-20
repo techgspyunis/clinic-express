@@ -40,6 +40,8 @@ import { createTranslationLabo, deactivateTranslationLabo, getAllTranslationLabo
 import { createTranslation, deactivateTranslation, getAllTranslations, getTranslationById, updateTranslation } from './controllers/translationController';
 import { createTranslationHw, deactivateTranslationHw, getAllTranslationHw, getTranslationHwById, updateTranslationHw } from './controllers/translationHwController';
 
+import { getFinancialAnalysis } from './controllers/querieController';
+
 // 1. Cargar variables de entorno
 dotenv.config();
 
@@ -179,6 +181,10 @@ app.get('/translationAliases/:aliasId', getTranslationAliasById(supabase));
 app.put('/translationAliases/:aliasId', updateTranslationAlias(supabase));
 // Deactivate a translation alias record by ID (soft delete)
 app.delete('/translationAliases/:aliasId', deactivateTranslationAlias(supabase));
+
+//--- Queries Routes --
+
+app.get('/queries/financial', authenticateToken, getFinancialAnalysis(supabase));
 
 
 // 7. Iniciar el servidor
